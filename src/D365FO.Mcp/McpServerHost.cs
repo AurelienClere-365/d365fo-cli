@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using D365FO.Core;
 using D365FO.Core.Index;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -42,6 +44,32 @@ public static class McpServerHost
         var transport = new StdioServerTransport(options, loggerFactory);
         var server = McpServer.Create(transport, options, loggerFactory, serviceProvider: null);
         await server.RunAsync(ct);
+    }
+
+    public static async Task RunHttpAsync(string? databasePath = null, int port = 8080, CancellationToken ct = default)
+    {
+        var settings = D365FoSettings.FromEnvironment(databasePath);
+        var dir = Path.GetDirectoryName(Path.GetFullPath(settings.DatabasePath));
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        var repo = new MetadataRepository(settings.DatabasePath);
+        repo.EnsureSchema();
+        var handlers = new ToolHandlers(repo);
+        var mcpOptions = BuildOptions(handlers);
+
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        builder.Services.AddMcpServer(opts =>
+        {
+            opts.ServerInfo = mcpOptions.ServerInfo;
+            opts.Capabilities = mcpOptions.Capabilities;
+            opts.Handlers = mcpOptions.Handlers;
+        });
+
+        var app = builder.Build();
+        app.MapMcp("/mcp");
+
+        await app.RunAsync(ct);
     }
 
     public static McpServerOptions BuildOptions(ToolHandlers handlers)
