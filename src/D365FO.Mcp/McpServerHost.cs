@@ -64,7 +64,7 @@ public static class McpServerHost
             opts.ServerInfo = mcpOptions.ServerInfo;
             opts.Capabilities = mcpOptions.Capabilities;
             opts.Handlers = mcpOptions.Handlers;
-        });
+        }).WithHttpTransport();
 
         var app = builder.Build();
         app.MapMcp("/mcp");
